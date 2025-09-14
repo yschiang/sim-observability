@@ -1,0 +1,10 @@
+version: "3.9"
+services:
+  d:
+    environment:
+      - DEFAULT_NORMAL_MS=3000
+      - SLOW_MS=10000
+      - SLOW_DEVICES=dev-slow-1,dev-slow-2,dev-slow-3
+      - HANG_DEVICES=dev-hang-1
+      - PROB_SLOW=0.15
+      - PROB_HANG=0.05
