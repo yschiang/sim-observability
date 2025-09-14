@@ -2,6 +2,9 @@ import os, asyncio, time, aiohttp, grpc
 from grpc import aio
 from opentelemetry.instrumentation.grpc import GrpcInstrumentorServer
 from opentelemetry.instrumentation.aiohttp_client import AioHttpClientInstrumentor
+from opentelemetry import trace, context
+from opentelemetry.propagate import extract
+from opentelemetry.trace.propagation.tracecontext import TraceContextTextMapPropagator
 from prometheus_client import Gauge, Counter, Histogram, start_http_server
 from otel_init import init_tracing
 
@@ -9,7 +12,8 @@ import sys
 print("Starting service C...", flush=True)
 
 init_tracing("svc-c")
-GrpcInstrumentorServer().instrument()
+# Don't auto-instrument gRPC server - we'll handle trace context manually
+# GrpcInstrumentorServer().instrument()
 AioHttpClientInstrumentor().instrument()
 
 import sys
@@ -94,6 +98,10 @@ PORT = os.getenv("PORT", "50051")
 SEM = asyncio.Semaphore(1)
 
 # Device routing based on device_id patterns
+# Convert gRPC metadata to dictionary for OpenTelemetry extraction
+def metadata_to_dict(metadata):
+    return {item.key: item.value for item in metadata}
+
 def get_device_url(device_id: str) -> str:
     if "slow" in device_id.lower():
         return D_SLOW_URL
@@ -102,56 +110,92 @@ def get_device_url(device_id: str) -> str:
 
 class S(rpc.DeviceProxyServicer):
     async def Process(self, req: pb.ProcessRequest, ctx: aio.ServicerContext):
-        print(f"C received request: device_id={req.device_id}, ms={req.ms}", flush=True)
-        TOTAL_RECEIVED.inc()  # Track total received
+        print(f"DEBUG: Process method called for device_id={req.device_id}", flush=True)
         
-        # Simple semaphore handling without complex error cases
-        await SEM.acquire()
-        g_inflight.set(1)  # Mark as busy
+        # Extract trace context from gRPC metadata
+        metadata = ctx.invocation_metadata()
         
-        t0 = time.perf_counter()
-        try:
-            start = time.perf_counter()
-            device_url = get_device_url(req.device_id)
+        # Debug: Print received metadata
+        print(f"DEBUG: Received gRPC metadata (count: {len(metadata)}):", flush=True)
+        for item in metadata:
+            key, value = item.key, item.value
+            print(f"  {key}: {value}", flush=True)
+            if 'trace' in key.lower():
+                print(f"  *** TRACE HEADER: {key}: {value}", flush=True)
+        
+        # Convert metadata to dictionary and extract trace context
+        metadata_dict = metadata_to_dict(metadata)
+        print(f"DEBUG: Metadata dict: {metadata_dict}", flush=True)
+        parent_context = extract(metadata_dict)
+        
+        # Debug: Check extracted context
+        extracted_span = trace.get_current_span(parent_context)
+        if extracted_span:
+            extracted_context = extracted_span.get_span_context()
+            print(f"DEBUG: Extracted trace_id={format(extracted_context.trace_id, '032x')}", flush=True)
+        else:
+            print(f"DEBUG: No span found in extracted context", flush=True)
+        
+        # Create a span manually with the extracted parent context
+        tracer = trace.get_tracer(__name__)
+        with tracer.start_as_current_span(
+            "deviceproxy.DeviceProxy/Process",
+            context=parent_context,
+            kind=trace.SpanKind.SERVER
+        ) as span:
+            # Debug: Print span info
+            span_context = span.get_span_context()
+            print(f"DEBUG: Created span with trace_id={format(span_context.trace_id, '032x')}, span_id={format(span_context.span_id, '016x')}", flush=True)
+            print(f"C received request: device_id={req.device_id}, ms={req.ms}", flush=True)
+            TOTAL_RECEIVED.inc()  # Track total received
             
-            # Simplified HTTP request to device
-            url = f"{device_url}/do_work?device_id={req.device_id}&ms={req.ms}&mode={req.mode}"
-            timeout = aiohttp.ClientTimeout(total=DEVICE_TIMEOUT_S)
+            # Simple semaphore handling without complex error cases
+            await SEM.acquire()
+            g_inflight.set(1)  # Mark as busy
             
-            print(f"C calling device: {url}", flush=True)
-            
-            async with aiohttp.ClientSession() as session:
-                async with session.get(url, timeout=timeout) as response:
-                    response.raise_for_status()
-                    result = await response.json()
-            
-            print(f"C got device response: {result}", flush=True)
-            
-            # Track latency
-            cd = (time.perf_counter() - start) * 1000
-            CD.observe(cd)
-            
-            # Track successful completion
-            COMPLETED.inc()
-            
-            # Return response without complex metadata handling for now
-            return pb.ProcessReply(
-                device_id=result["device_id"], 
-                cost_ms=result["cost_ms"]
-            )
-                    
-        except Exception as e:
-            print(f"C error: {e}", flush=True)
-            FAILED.inc()  # Track failure
-            ERRS.labels(code="UNAVAILABLE").inc()
-            # Instead of ctx.abort, raise gRPC exception directly
-            raise grpc.aio.AioRpcError(grpc.StatusCode.UNAVAILABLE, f"device error: {e}")
-        finally:
-            # Always release semaphore and mark as available
-            LAT.observe((time.perf_counter() - t0) * 1000)
-            SEM.release()
-            g_inflight.set(0)  # Mark as available
-            print(f"C request completed", flush=True)
+            t0 = time.perf_counter()
+            try:
+                start = time.perf_counter()
+                device_url = get_device_url(req.device_id)
+                
+                # Simplified HTTP request to device
+                url = f"{device_url}/do_work?device_id={req.device_id}&ms={req.ms}&mode={req.mode}"
+                timeout = aiohttp.ClientTimeout(total=DEVICE_TIMEOUT_S)
+                
+                print(f"C calling device: {url}", flush=True)
+                
+                async with aiohttp.ClientSession() as session:
+                    async with session.get(url, timeout=timeout) as response:
+                        response.raise_for_status()
+                        result = await response.json()
+                
+                print(f"C got device response: {result}", flush=True)
+                
+                # Track latency
+                cd = (time.perf_counter() - start) * 1000
+                CD.observe(cd)
+                
+                # Track successful completion
+                COMPLETED.inc()
+                
+                # Return response without complex metadata handling for now
+                return pb.ProcessReply(
+                    device_id=result["device_id"], 
+                    cost_ms=result["cost_ms"]
+                )
+                        
+            except Exception as e:
+                print(f"C error: {e}", flush=True)
+                FAILED.inc()  # Track failure
+                ERRS.labels(code="UNAVAILABLE").inc()
+                # Instead of ctx.abort, raise gRPC exception directly
+                raise grpc.aio.AioRpcError(grpc.StatusCode.UNAVAILABLE, f"device error: {e}")
+            finally:
+                # Always release semaphore and mark as available
+                LAT.observe((time.perf_counter() - t0) * 1000)
+                SEM.release()
+                g_inflight.set(0)  # Mark as available
+                print(f"C request completed", flush=True)
 
 async def serve():
     print(f"Starting gRPC server on port {PORT}", flush=True)

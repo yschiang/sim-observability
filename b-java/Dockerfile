@@ -42,6 +42,11 @@ EXPOSE 8080 8081
 CMD ["java", \
      "-javaagent:otel-agent.jar", \
      "-Dotel.service.name=svc-b", \
-     "-Dotel.exporter.otlp.endpoint=http://tempo:4318", \
+     "-Dotel.exporter.otlp.traces.endpoint=http://tempo:4318/v1/traces", \
      "-Dotel.exporter.otlp.protocol=http/protobuf", \
+     "-Dotel.metrics.exporter=none", \
+     "-Dotel.logs.exporter=none", \
+     "-Dotel.instrumentation.grpc.enabled=true", \
+     "-Dotel.propagators=tracecontext,baggage", \
+     "-Dotel.javaagent.debug=true", \
      "-jar", "app.jar"]

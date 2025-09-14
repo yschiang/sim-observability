@@ -8,6 +8,15 @@ import io.grpc.ManagedChannel;
 import io.grpc.ManagedChannelBuilder;
 import io.grpc.StatusRuntimeException;
 import io.grpc.stub.StreamObserver;
+import io.grpc.Metadata;
+import io.grpc.ClientInterceptor;
+import io.grpc.ClientCall;
+import io.grpc.MethodDescriptor;
+import io.grpc.CallOptions;
+import io.grpc.ForwardingClientCall;
+import io.opentelemetry.api.GlobalOpenTelemetry;
+import io.opentelemetry.context.Context;
+import io.opentelemetry.context.propagation.TextMapSetter;
 import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.Gauge;
 import io.micrometer.core.instrument.MeterRegistry;
@@ -22,6 +31,43 @@ import java.util.concurrent.TimeUnit;
 
 @Service
 public class GrpcClientService {
+    
+    // Custom interceptor to inject trace context into gRPC metadata
+    private static class TraceContextInterceptor implements ClientInterceptor {
+        private final TextMapSetter<Metadata> setter = new TextMapSetter<Metadata>() {
+            @Override
+            public void set(Metadata carrier, String key, String value) {
+                carrier.put(Metadata.Key.of(key, Metadata.ASCII_STRING_MARSHALLER), value);
+            }
+        };
+
+        @Override
+        public <ReqT, RespT> ClientCall<ReqT, RespT> interceptCall(
+                MethodDescriptor<ReqT, RespT> method,
+                CallOptions callOptions,
+                io.grpc.Channel next) {
+            
+            return new ForwardingClientCall.SimpleForwardingClientCall<ReqT, RespT>(next.newCall(method, callOptions)) {
+                @Override
+                public void start(Listener<RespT> responseListener, Metadata headers) {
+                    // Inject current trace context into gRPC metadata
+                    GlobalOpenTelemetry.getPropagators()
+                            .getTextMapPropagator()
+                            .inject(Context.current(), headers, setter);
+                    
+                    // Debug: Print headers being sent
+                    System.out.println("DEBUG: Sending gRPC headers:");
+                    for (String key : headers.keys()) {
+                        if (key.toLowerCase().contains("trace")) {
+                            System.out.println("  " + key + ": " + headers.get(Metadata.Key.of(key, Metadata.ASCII_STRING_MARSHALLER)));
+                        }
+                    }
+                    
+                    super.start(responseListener, headers);
+                }
+            };
+        }
+    }
     
     private final AppConfiguration appConfig;
     private final MeterRegistry meterRegistry;
@@ -45,9 +91,10 @@ public class GrpcClientService {
     
     @PostConstruct
     public void init() {
-        // Simplified gRPC channel - mimic Python approach
+        // gRPC channel with trace context propagation
         this.channel = ManagedChannelBuilder.forTarget(appConfig.getCTarget())
                 .usePlaintext()
+                .intercept(new TraceContextInterceptor())
                 .build();
                 
         this.blockingStub = DeviceProxyGrpc.newBlockingStub(channel);

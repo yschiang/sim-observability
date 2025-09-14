@@ -80,6 +80,24 @@
             <version>${opentelemetry.version}</version>
         </dependency>
         
+        <dependency>
+            <groupId>io.opentelemetry.instrumentation</groupId>
+            <artifactId>opentelemetry-grpc-1.6</artifactId>
+            <version>1.32.0-alpha</version>
+        </dependency>
+        
+        <dependency>
+            <groupId>io.opentelemetry</groupId>
+            <artifactId>opentelemetry-context</artifactId>
+            <version>${opentelemetry.version}</version>
+        </dependency>
+        
+        <dependency>
+            <groupId>io.opentelemetry</groupId>
+            <artifactId>opentelemetry-extension-trace-propagators</artifactId>
+            <version>${opentelemetry.version}</version>
+        </dependency>
+        
         <!-- JSON processing -->
         <dependency>
             <groupId>com.fasterxml.jackson.core</groupId>
