@@ -1,0 +1,73 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: svc-b
+
+# Actuator configuration for health and metrics
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus
+      base-path: /actuator
+  endpoint:
+    health:
+      show-details: always
+    prometheus:
+      enabled: true
+  server:
+    port: 8081
+  # Enable histogram buckets and percentiles for timers
+  metrics:
+    distribution:
+      percentiles-histogram:
+        "[b_e2e_ms]": true
+      percentiles:
+        "[b_e2e_ms]": 0.5, 0.95, 0.99
+
+# gRPC Configuration  
+grpc:
+  client:
+    c-service:
+      address: static://c:50051
+      negotiation-type: plaintext
+      keep-alive-time: 30s
+      keep-alive-timeout: 10s
+      keep-alive-without-calls: false
+      max-inbound-message-size: 4MB
+      max-outbound-message-size: 4MB
+
+# Application Configuration
+app:
+  c-target: c:50051
+  connect-timeout-ms: 1000
+  request-timeout-ms: 10000
+  max-b-to-c-retries: 2
+  enable-b-to-c-retries: true
+  b-to-c-retry-backoff-ms: 100
+  map-resource-exhausted-to-429: false
+  map-unavailable-to-503: false
+  map-deadline-exceeded-to-504: false
+
+# OpenTelemetry Configuration
+otel:
+  service:
+    name: svc-b
+  exporter:
+    otlp:
+      endpoint: http://tempo:4318
+  instrumentation:
+    grpc:
+      enabled: true
+    http:
+      enabled: true
+
+# Logging
+logging:
+  level:
+    com.observability.sim: INFO
+    io.grpc: WARN
+  pattern:
+    console: "%d{HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n"

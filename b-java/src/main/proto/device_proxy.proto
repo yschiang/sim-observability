@@ -1,0 +1,20 @@
+syntax = "proto3";
+package deviceproxy;
+
+option java_package = "com.observability.sim.deviceproxy";
+option java_outer_classname = "DeviceProxyProto";
+
+service DeviceProxy {
+  rpc Process (ProcessRequest) returns (ProcessReply) {}
+}
+
+message ProcessRequest {
+  string device_id = 1;
+  int32  ms = 2;
+  string mode = 3;
+}
+
+message ProcessReply {
+  string device_id = 1;
+  int32  cost_ms = 2;
+}

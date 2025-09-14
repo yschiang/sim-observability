@@ -60,6 +60,7 @@ services:
       - OTEL_SERVICE_NAME=svc-c
     depends_on: [d-fast, d-slow, tempo]
 
+  # Service B - Python FastAPI (original)
   b:
     build: ./b
     command: uvicorn app:app --host 0.0.0.0 --port 8080
@@ -72,3 +73,18 @@ services:
       - OTEL_SERVICE_NAME=svc-b
     depends_on: [c, tempo]
     ports: ["8080:8080", "8081:8081"]
+    profiles: ["python"]
+
+  # Service B - Java Spring Boot (alternative implementation)  
+  b-java:
+    build: ./b-java
+    env_file:
+      - ./config/baseline.env
+    environment:
+      - OTEL_SERVICE_NAME=svc-b
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://tempo:4318
+      - OTEL_EXPORTER_OTLP_PROTOCOL=http/protobuf
+      - APP_C_TARGET=c:50051
+    depends_on: [c, tempo]
+    ports: ["8080:8080", "8081:8081"] 
+    profiles: ["java"]
