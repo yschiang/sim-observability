@@ -50,10 +50,11 @@ services:
 
   c:
     build: ./c
+    env_file:
+      - ./config/baseline.env  # Default to baseline, can override with tunable.env
     environment:
       - D_FAST_URL=http://d-fast:8000
       - D_SLOW_URL=http://d-slow:8000
-      - DEVICE_TIMEOUT_S=3.0
       - OTEL_EXPORTER_OTLP_ENDPOINT=http://tempo:4318
       - OTEL_EXPORTER_OTLP_PROTOCOL=http/protobuf
       - OTEL_SERVICE_NAME=svc-c
@@ -62,10 +63,12 @@ services:
   b:
     build: ./b
     command: uvicorn app:app --host 0.0.0.0 --port 8080
+    env_file:
+      - ./config/baseline.env  # Default to baseline, can override with tunable.env
     environment:
       - C_TARGET=c:50051
       - OTEL_EXPORTER_OTLP_ENDPOINT=http://tempo:4318
       - OTEL_EXPORTER_OTLP_PROTOCOL=http/protobuf
       - OTEL_SERVICE_NAME=svc-b
     depends_on: [c, tempo]
-    ports: ["8080:8080"]
+    ports: ["8080:8080", "8081:8081"]

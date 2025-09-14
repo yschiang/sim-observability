@@ -10,13 +10,9 @@ scrape_configs:
     static_configs:
       - targets: ["d:9100"]
 
-  - job_name: "c"
+  - job_name: "c-instances"
     dns_sd_configs:
       - names: ["c"]
         type: A
         port: 9100
         refresh_interval: 5s
-  
-  - job_name: "c-alt-ports"
-    static_configs:
-      - targets: ["c:9101", "c:9102"]
