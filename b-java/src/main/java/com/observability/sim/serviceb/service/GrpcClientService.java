@@ -81,6 +81,7 @@ public class GrpcClientService {
     private Counter failedCounter;
     private Counter errorsCounter;
     private Timer latencyTimer;
+    private Timer failedLatencyTimer;
     private Gauge availableGauge;
     
     @Autowired
@@ -132,6 +133,11 @@ public class GrpcClientService {
                 .tag("endpoint", "/process")
                 .register(meterRegistry);
                 
+        this.failedLatencyTimer = Timer.builder("b_failed_e2e_ms")
+                .description("End-to-end latency for failed requests (ms)")
+                .tag("endpoint", "/process")
+                .register(meterRegistry);
+                
         // Register gauge differently 
         meterRegistry.gauge("b_available_c_instances", this, obj -> obj.getAvailableInstances());
     }
@@ -166,7 +172,7 @@ public class GrpcClientService {
             return reply;
             
         } catch (StatusRuntimeException e) {
-            sample.stop(latencyTimer);
+            sample.stop(failedLatencyTimer);
             failedCounter.increment();
             
             // Record error by gRPC status code

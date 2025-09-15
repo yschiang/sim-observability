@@ -47,7 +47,7 @@ public class ProcessController {
     
     @GetMapping("/process")
     public ResponseEntity<Object> process(
-            @RequestParam(defaultValue = "dev-1") String deviceId,
+            @RequestParam(name = "device_id", defaultValue = "dev-1") String deviceId,
             @RequestParam(defaultValue = "3000") int ms,
             @RequestParam(defaultValue = "normal") String mode) {
         

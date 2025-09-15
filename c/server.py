@@ -54,23 +54,22 @@ if metrics_started:
     g_inflight = Gauge("c_inflight", "whether C is processing a request"); g_inflight.set(0)
     g_ejected = Gauge("c_ejected", "whether C is ejected"); g_ejected.set(0)
     
-    # Revised metrics structure for dashboard visibility
-    TOTAL_RECEIVED = Counter("c_total_received", "Total requests received")
-    COMPLETED = Counter("c_completed", "Successfully completed requests")
-    FAILED = Counter("c_failed", "Failed requests")
-    ERRS = Counter("c_errors_total", "Total errors", ["code"])
-    LAT  = Histogram("c_process_ms", "C handling latency (ms)",
+    # Revised metrics structure for dashboard visibility with deviceId labels
+    TOTAL_RECEIVED = Counter("c_total_received", "Total requests received", ["device_id"])
+    COMPLETED = Counter("c_completed", "Successfully completed requests", ["device_id"])
+    FAILED = Counter("c_failed", "Failed requests", ["device_id"])
+    ERRS = Counter("c_errors_total", "Total errors", ["code", "device_id"])
+    LAT  = Histogram("c_process_ms", "C handling latency (ms)", ["device_id"],
                      buckets=[50,100,200,500,1000,2000,3000,5000,10000])
-    CD   = Histogram("c_to_d_ms", "C→D downstream latency (ms)",
+    CD   = Histogram("c_to_d_ms", "C→D downstream latency (ms)", ["device_id"],
                      buckets=[50,100,200,500,1000,2000,3000,5000,10000])
     
     # Keep legacy metrics for compatibility
     REQS = TOTAL_RECEIVED
     
     # Initialize metrics with zero values to ensure they appear in /metrics
-    TOTAL_RECEIVED._value.set(0)
-    COMPLETED._value.set(0)
-    FAILED._value.set(0)
+    # With labeled metrics, we can't pre-initialize without specific labels
+    # The metrics will appear once the first labeled increment occurs
     
     print("✓ Real metrics initialized", flush=True)
 else:
@@ -147,7 +146,7 @@ class S(rpc.DeviceProxyServicer):
             span_context = span.get_span_context()
             print(f"DEBUG: Created span with trace_id={format(span_context.trace_id, '032x')}, span_id={format(span_context.span_id, '016x')}", flush=True)
             print(f"C received request: device_id={req.device_id}, ms={req.ms}", flush=True)
-            TOTAL_RECEIVED.inc()  # Track total received
+            TOTAL_RECEIVED.labels(device_id=req.device_id).inc()  # Track total received
             
             # Simple semaphore handling without complex error cases
             await SEM.acquire()
@@ -173,10 +172,10 @@ class S(rpc.DeviceProxyServicer):
                 
                 # Track latency
                 cd = (time.perf_counter() - start) * 1000
-                CD.observe(cd)
+                CD.labels(device_id=req.device_id).observe(cd)
                 
                 # Track successful completion
-                COMPLETED.inc()
+                COMPLETED.labels(device_id=req.device_id).inc()
                 
                 # Return response without complex metadata handling for now
                 return pb.ProcessReply(
@@ -186,13 +185,13 @@ class S(rpc.DeviceProxyServicer):
                         
             except Exception as e:
                 print(f"C error: {e}", flush=True)
-                FAILED.inc()  # Track failure
-                ERRS.labels(code="UNAVAILABLE").inc()
+                FAILED.labels(device_id=req.device_id).inc()  # Track failure
+                ERRS.labels(code="UNAVAILABLE", device_id=req.device_id).inc()
                 # Instead of ctx.abort, raise gRPC exception directly
                 raise grpc.aio.AioRpcError(grpc.StatusCode.UNAVAILABLE, f"device error: {e}")
             finally:
                 # Always release semaphore and mark as available
-                LAT.observe((time.perf_counter() - t0) * 1000)
+                LAT.labels(device_id=req.device_id).observe((time.perf_counter() - t0) * 1000)
                 SEM.release()
                 g_inflight.set(0)  # Mark as available
                 print(f"C request completed", flush=True)
