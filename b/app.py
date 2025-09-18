@@ -1,6 +1,10 @@
 from fastapi import FastAPI, HTTPException, Response
 import os, asyncio, time, uuid, json
 import grpc
+import psutil
+import numpy as np
+import threading
+from typing import List
 from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
 from opentelemetry.instrumentation.grpc import GrpcInstrumentorClient
 from opentelemetry.instrumentation.aiohttp_client import AioHttpClientInstrumentor
@@ -29,6 +33,13 @@ LAT  = Histogram("b_e2e_ms", "End-to-end latency (ms)",
                  labelnames=["endpoint"])
 AVAILABLE = Gauge("b_available_c_instances", "Available (idle & healthy) C instances")
 
+# CPU and Memory metrics
+CPU_USAGE = Gauge("b_cpu_usage_percent", "Current CPU usage percentage")
+MEM_USAGE = Gauge("b_memory_usage_percent", "Current memory usage percentage")
+BATCH_PROCESSING = Gauge("b_batch_processing", "Whether batch processing is active (0/1)")
+BATCH_SIZE = Histogram("b_batch_size", "Size of processed batches", 
+                       buckets=[100, 500, 1000, 5000, 10000, 50000, 100000, 500000, 1000000])
+
 # Keep legacy metrics for compatibility
 REQS = TOTAL_RECEIVED
 
@@ -38,6 +49,28 @@ COMPLETED.labels(endpoint="/process")._value.set(0)
 FAILED.labels(endpoint="/process")._value.set(0)
 
 app = FastAPI()
+
+# Background thread to monitor system metrics
+def monitor_system_metrics():
+    while True:
+        try:
+            # Get current process CPU and memory usage
+            process = psutil.Process()
+            cpu_percent = process.cpu_percent(interval=0.1)
+            mem_percent = process.memory_percent()
+            
+            # Update Prometheus metrics
+            CPU_USAGE.set(cpu_percent)
+            MEM_USAGE.set(mem_percent)
+            
+            time.sleep(1)  # Update every second
+        except Exception as e:
+            print(f"Error monitoring metrics: {e}")
+            time.sleep(5)
+
+# Start monitoring thread
+monitoring_thread = threading.Thread(target=monitor_system_metrics, daemon=True)
+monitoring_thread.start()
 
 C_TARGET = os.getenv("C_TARGET", "c:50051")
 
@@ -61,6 +94,47 @@ CHANNEL = grpc.aio.insecure_channel(
 )
 STUB = rpc.DeviceProxyStub(CHANNEL)
 
+def cpu_intensive_batch_process(data_size: int, intensity: float = 1.0):
+    """
+    Simulate CPU-intensive batch data processing
+    - data_size: Number of records to process
+    - intensity: How CPU-intensive (1.0 = normal, 2.0 = double, etc.)
+    """
+    BATCH_PROCESSING.set(1)
+    BATCH_SIZE.observe(data_size)
+    
+    try:
+        print(f"Starting batch processing of {data_size} records with intensity {intensity}")
+        
+        # Simulate loading data into memory (creates large arrays)
+        batch_data = []
+        for i in range(min(data_size, 100000)):  # Cap at 100k to avoid memory issues
+            # Create random data that simulates records
+            record = np.random.random(int(100 * intensity))  # Adjust size based on intensity
+            batch_data.append(record)
+        
+        # CPU-intensive processing phase
+        results = []
+        operations = int(1000 * intensity)  # Number of operations per record
+        
+        for record in batch_data:
+            # Simulate complex calculations on each record
+            for _ in range(operations):
+                # Matrix operations are CPU-intensive
+                result = np.sum(record ** 2)
+                result = np.sqrt(result)
+                result = np.log(result + 1)
+            results.append(result)
+        
+        # Simulate data aggregation/reduction
+        final_result = np.mean(results) if results else 0
+        
+        print(f"Batch processing completed. Final result: {final_result}")
+        return {"records_processed": len(batch_data), "result": float(final_result)}
+    
+    finally:
+        BATCH_PROCESSING.set(0)
+
 @app.get("/health")
 async def health():
     return {"ok": True}
@@ -68,6 +142,44 @@ async def health():
 @app.get("/__status")
 async def status():
     return {"available_estimate": AVAILABLE._value.get()}
+
+@app.post("/batch_process")
+async def batch_process(size: int = 10000, intensity: float = 1.0):
+    """
+    Trigger batch processing that causes CPU spike
+    - size: Number of records to process (default 10000)
+    - intensity: CPU intensity multiplier (default 1.0, higher = more CPU)
+    """
+    ep = "/batch_process"
+    TOTAL_RECEIVED.labels(endpoint=ep).inc()
+    t0 = time.perf_counter()
+    
+    try:
+        # Run CPU-intensive batch processing in a thread to not block the event loop
+        loop = asyncio.get_event_loop()
+        result = await loop.run_in_executor(
+            None, 
+            cpu_intensive_batch_process, 
+            size, 
+            intensity
+        )
+        
+        e2e = (time.perf_counter()-t0)*1000
+        LAT.labels(endpoint=ep).observe(e2e)
+        COMPLETED.labels(endpoint=ep).inc()
+        
+        return {
+            "status": "success",
+            "processing_time_ms": e2e,
+            "records_processed": result["records_processed"],
+            "result": result["result"]
+        }
+    except Exception as e:
+        e2e = (time.perf_counter()-t0)*1000
+        LAT.labels(endpoint=ep).observe(e2e)
+        FAILED.labels(endpoint=ep).inc()
+        ERRS.labels(code="500", endpoint=ep).inc()
+        raise HTTPException(status_code=500, detail=f"Batch processing failed: {str(e)}")
 
 @app.get("/process")
 async def process(device_id: str="dev-1", ms: int=3000, mode: str="normal"):

@@ -2,10 +2,17 @@ global:
   scrape_interval: 2s
 
 scrape_configs:
+  # Service B - Java version
   - job_name: "b"
     static_configs:
       - targets: ["b-java:8081"]
     metrics_path: "/actuator/prometheus"
+  
+  # Service B - Python/FastAPI version
+  - job_name: "b-python"
+    static_configs:
+      - targets: ["b:8081"]
+    metrics_path: "/metrics"
 
   - job_name: "d"
     static_configs:

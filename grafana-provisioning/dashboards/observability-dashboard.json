@@ -18,7 +18,7 @@
   "editable": true,
   "fiscalYearStartMonth": 0,
   "graphTooltip": 0,
-  "id": 3,
+  "id": 1,
   "links": [],
   "panels": [
     {
@@ -403,7 +403,8 @@
               }
             ]
           },
-          "unit": "none"
+          "unit": "none",
+          "decimals": 0
         },
         "overrides": []
       },
@@ -467,7 +468,8 @@
               }
             ]
           },
-          "unit": "none"
+          "unit": "none",
+          "decimals": 0
         },
         "overrides": []
       },
@@ -973,6 +975,292 @@
       "type": "timeseries"
     },
     {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PBFA97CFB590B2093"
+      },
+      "description": "CPU usage percentage of Service B (Python FastAPI version)",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "CPU %",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "barWidthFactor": 0.6,
+            "drawStyle": "line",
+            "fillOpacity": 20,
+            "gradientMode": "opacity",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "vis": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 2,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "area"
+            }
+          },
+          "mappings": [],
+          "max": 200,
+          "min": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": 0
+              },
+              {
+                "color": "yellow",
+                "value": 50
+              },
+              {
+                "color": "orange",
+                "value": 75
+              },
+              {
+                "color": "red",
+                "value": 90
+              }
+            ]
+          },
+          "unit": "percent"
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Batch Processing"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "purple",
+                  "mode": "fixed"
+                }
+              },
+              {
+                "id": "custom.drawStyle",
+                "value": "bars"
+              },
+              {
+                "id": "custom.fillOpacity",
+                "value": 30
+              },
+              {
+                "id": "custom.axisLabel",
+                "value": "Batch"
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 11,
+        "w": 12,
+        "x": 0,
+        "y": 21
+      },
+      "id": 50,
+      "options": {
+        "legend": {
+          "calcs": [
+            "lastNotNull",
+            "max",
+            "mean"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "hideZeros": false,
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "pluginVersion": "12.1.1",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "PBFA97CFB590B2093"
+          },
+          "expr": "b_cpu_usage_percent",
+          "legendFormat": "CPU Usage %",
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "PBFA97CFB590B2093"
+          },
+          "expr": "b_batch_processing",
+          "legendFormat": "Batch Processing",
+          "refId": "B"
+        }
+      ],
+      "title": "B - CPU Usage (FashtAPI)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PBFA97CFB590B2093"
+      },
+      "description": "Memory usage percentage of Service B (Python FastAPI version)",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "Memory %",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "barWidthFactor": 0.6,
+            "drawStyle": "line",
+            "fillOpacity": 20,
+            "gradientMode": "opacity",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "vis": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 2,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "area"
+            }
+          },
+          "mappings": [],
+          "max": 100,
+          "min": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": 0
+              },
+              {
+                "color": "yellow",
+                "value": 30
+              },
+              {
+                "color": "orange",
+                "value": 60
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          },
+          "unit": "percent"
+        },
+        "overrides": [
+          {
+            "__systemRef": "hideSeriesFrom",
+            "matcher": {
+              "id": "byNames",
+              "options": {
+                "mode": "exclude",
+                "names": [
+                  "Memory Usage %"
+                ],
+                "prefix": "All except:",
+                "readOnly": true
+              }
+            },
+            "properties": [
+              {
+                "id": "custom.hideFrom",
+                "value": {
+                  "legend": false,
+                  "tooltip": false,
+                  "viz": true
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 11,
+        "w": 12,
+        "x": 12,
+        "y": 21
+      },
+      "id": 51,
+      "options": {
+        "legend": {
+          "calcs": [
+            "lastNotNull",
+            "max",
+            "mean"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "hideZeros": false,
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "pluginVersion": "12.1.1",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "PBFA97CFB590B2093"
+          },
+          "expr": "b_memory_usage_percent",
+          "legendFormat": "Memory Usage %",
+          "refId": "A"
+        }
+      ],
+      "title": "B - Memory Usage",
+      "type": "timeseries"
+    },
+    {
       "description": "Service C Observability Dashboard",
       "fieldConfig": {
         "defaults": {},
@@ -982,7 +1270,7 @@
         "h": 3,
         "w": 24,
         "x": 0,
-        "y": 21
+        "y": 32
       },
       "id": 200,
       "options": {
@@ -1025,9 +1313,9 @@
       },
       "gridPos": {
         "h": 6,
-        "w": 6,
+        "w": 4,
         "x": 0,
-        "y": 24
+        "y": 35
       },
       "id": 11,
       "options": {
@@ -1091,8 +1379,8 @@
       "gridPos": {
         "h": 6,
         "w": 4,
-        "x": 6,
-        "y": 24
+        "x": 4,
+        "y": 35
       },
       "id": 12,
       "options": {
@@ -1159,9 +1447,9 @@
       },
       "gridPos": {
         "h": 6,
-        "w": 6,
-        "x": 10,
-        "y": 24
+        "w": 4,
+        "x": 8,
+        "y": 35
       },
       "id": 13,
       "options": {
@@ -1291,9 +1579,9 @@
       },
       "gridPos": {
         "h": 6,
-        "w": 8,
-        "x": 16,
-        "y": 24
+        "w": 12,
+        "x": 12,
+        "y": 35
       },
       "id": 21,
       "options": {
@@ -1362,7 +1650,7 @@
         "h": 6,
         "w": 6,
         "x": 0,
-        "y": 30
+        "y": 41
       },
       "id": 14,
       "options": {
@@ -1426,7 +1714,7 @@
         "h": 6,
         "w": 6,
         "x": 6,
-        "y": 30
+        "y": 41
       },
       "id": 15,
       "options": {
@@ -1494,7 +1782,7 @@
         "h": 6,
         "w": 6,
         "x": 12,
-        "y": 30
+        "y": 41
       },
       "id": 16,
       "options": {
@@ -1566,7 +1854,7 @@
         "h": 6,
         "w": 6,
         "x": 18,
-        "y": 30
+        "y": 41
       },
       "id": 17,
       "options": {
@@ -1664,7 +1952,7 @@
         "h": 6,
         "w": 8,
         "x": 0,
-        "y": 36
+        "y": 47
       },
       "id": 18,
       "options": {
@@ -1758,7 +2046,7 @@
         "h": 6,
         "w": 8,
         "x": 8,
-        "y": 36
+        "y": 47
       },
       "id": 19,
       "options": {
@@ -1870,7 +2158,7 @@
         "h": 6,
         "w": 8,
         "x": 16,
-        "y": 36
+        "y": 47
       },
       "id": 30,
       "options": {
@@ -1937,7 +2225,7 @@
         "h": 6,
         "w": 24,
         "x": 0,
-        "y": 42
+        "y": 53
       },
       "id": 22,
       "options": {
@@ -2172,7 +2460,7 @@
         "h": 8,
         "w": 24,
         "x": 0,
-        "y": 48
+        "y": 59
       },
       "id": 31,
       "options": {
@@ -2358,12 +2646,12 @@
     "list": []
   },
   "time": {
-    "from": "now-30m",
+    "from": "now-15m",
     "to": "now"
   },
   "timepicker": {},
   "timezone": "",
   "title": "Observability Dashboard - Services B & C",
   "uid": "observability-bc",
-  "version": 22
+  "version": 5
 }

@@ -4,6 +4,8 @@ grpcio
 grpcio-tools
 aiohttp
 prometheus-client
+psutil
+numpy
 opentelemetry-api
 opentelemetry-sdk
 opentelemetry-exporter-otlp
