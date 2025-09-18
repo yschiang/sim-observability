@@ -35,7 +35,8 @@ AVAILABLE = Gauge("b_available_c_instances", "Available (idle & healthy) C insta
 
 # CPU and Memory metrics
 CPU_USAGE = Gauge("b_cpu_usage_percent", "Current CPU usage percentage")
-MEM_USAGE = Gauge("b_memory_usage_percent", "Current memory usage percentage")
+MEM_USAGE = Gauge("b_memory_usage_percent", "Current memory usage percentage (system-based)")
+MEM_USAGE_CONTAINER = Gauge("b_memory_usage_container_percent", "Memory usage relative to container limit (256MB)")
 BATCH_PROCESSING = Gauge("b_batch_processing", "Whether batch processing is active (0/1)")
 BATCH_SIZE = Histogram("b_batch_size", "Size of processed batches", 
                        buckets=[100, 500, 1000, 5000, 10000, 50000, 100000, 500000, 1000000])
@@ -48,24 +49,43 @@ TOTAL_RECEIVED.labels(endpoint="/process")._value.set(0)
 COMPLETED.labels(endpoint="/process")._value.set(0) 
 FAILED.labels(endpoint="/process")._value.set(0)
 
+# Initialize memory metrics
+MEM_USAGE.set(0)
+MEM_USAGE_CONTAINER.set(0)
+CPU_USAGE.set(0)
+
 app = FastAPI()
 
 # Background thread to monitor system metrics
 def monitor_system_metrics():
+    # Container memory limit (hardcoded to match docker-compose.yml)
+    CONTAINER_MEM_LIMIT = 256 * 1024 * 1024  # 256 MB in bytes
+    
+    print(f"[INIT] Memory monitoring started. Container limit: 256MB", flush=True)
+    
     while True:
         try:
-            # Get current process CPU and memory usage
+            # Get current process metrics
             process = psutil.Process()
             cpu_percent = process.cpu_percent(interval=0.1)
-            mem_percent = process.memory_percent()
+            mem_info = process.memory_info()
+            mem_bytes = mem_info.rss
+            
+            # Calculate memory percentage based on container limit (not system)
+            mem_percent_container = (mem_bytes / CONTAINER_MEM_LIMIT) * 100
+            
+            # Log every 5 seconds for debugging
+            current_time = int(time.time())
+            if current_time % 5 == 0:
+                print(f"[METRICS] CPU: {cpu_percent:.1f}% | Memory: {mem_bytes/1024/1024:.1f}MB ({mem_percent_container:.1f}% of 256MB)", flush=True)
             
             # Update Prometheus metrics
             CPU_USAGE.set(cpu_percent)
-            MEM_USAGE.set(mem_percent)
+            MEM_USAGE.set(mem_percent_container)  # Use container-based percentage
             
-            time.sleep(1)  # Update every second
+            time.sleep(1)
         except Exception as e:
-            print(f"Error monitoring metrics: {e}")
+            print(f"[ERROR] Metrics error: {e}", flush=True)
             time.sleep(5)
 
 # Start monitoring thread
@@ -96,48 +116,152 @@ STUB = rpc.DeviceProxyStub(CHANNEL)
 
 def cpu_intensive_batch_process(data_size: int, intensity: float = 1.0):
     """
-    Simulate CPU-intensive batch data processing
+    Simulate CPU and Memory intensive batch data processing
     - data_size: Number of records to process
-    - intensity: How CPU-intensive (1.0 = normal, 2.0 = double, etc.)
+    - intensity: Resource intensity (1.0 = normal, 2.0 = double, etc.)
     """
     BATCH_PROCESSING.set(1)
     BATCH_SIZE.observe(data_size)
     
+    # Memory holders to simulate memory growth - MUCH LARGER
+    memory_cache = []
+    intermediate_results = []
+    data_buffers = []
+    
     try:
         print(f"Starting batch processing of {data_size} records with intensity {intensity}")
         
-        # Simulate loading data into memory (creates large arrays)
+        # Phase 1: Aggressive memory allocation (simulates loading large dataset)
         batch_data = []
-        for i in range(min(data_size, 100000)):  # Cap at 100k to avoid memory issues
-            # Create random data that simulates records
-            record = np.random.random(int(100 * intensity))  # Adjust size based on intensity
+        # Much larger record size to consume more memory
+        record_size = int(10000 * intensity)  # 10x larger than before
+        
+        for i in range(min(data_size, 10000)):  # Cap at 10k for safety
+            # Create large numpy arrays to consume memory
+            record = np.random.random(record_size)
             batch_data.append(record)
+            
+            # Aggressively cache data (simulate real-world caching)
+            if i % 3 == 0:  # Cache more frequently
+                memory_cache.append(np.copy(record))
+            
+            # Create additional data buffers
+            if i % 5 == 0:
+                # Create large string buffers (simulates text processing)
+                buffer = "x" * int(5000 * intensity)
+                data_buffers.append(buffer)
         
-        # CPU-intensive processing phase
+        print(f"Loaded {len(batch_data)} records, memory cache size: {len(memory_cache)}")
+        
+        # Phase 2: CPU-intensive processing with heavy memory accumulation
         results = []
-        operations = int(1000 * intensity)  # Number of operations per record
+        operations = int(300 * intensity)  # Slightly reduced for performance
         
-        for record in batch_data:
-            # Simulate complex calculations on each record
-            for _ in range(operations):
-                # Matrix operations are CPU-intensive
+        # Pre-allocate large result matrices
+        result_matrices = []
+        
+        for idx, record in enumerate(batch_data):
+            # Create temporary arrays (significant memory growth)
+            temp_arrays = []
+            
+            for op in range(operations):
+                # Matrix operations (CPU intensive)
                 result = np.sum(record ** 2)
                 result = np.sqrt(result)
                 result = np.log(result + 1)
+                
+                # Keep more intermediate results (memory growth)
+                if op % 50 == 0:  # More frequent
+                    temp_arrays.append(np.random.random(1000))  # Larger arrays
+            
             results.append(result)
+            
+            # Store intermediate results more frequently (memory retention)
+            if idx % 2 == 0:  # Every 2 records instead of 5
+                intermediate_results.append({
+                    'index': idx,
+                    'temps': temp_arrays,
+                    'result': result,
+                    'matrix': np.random.random((100, 100))  # Add matrix to each result
+                })
+            
+            # Create result matrices
+            if idx % 10 == 0:
+                result_matrices.append(np.random.random((500, 500)))
         
-        # Simulate data aggregation/reduction
+        # Phase 3: Data aggregation (maximum memory usage)
+        # Create large aggregation structures
+        aggregated_data = {
+            'raw_data': batch_data[:100],  # Keep first 100 records
+            'cache': memory_cache[:50],     # Keep cache samples
+            'matrices': result_matrices,     # All result matrices
+            'buffers': data_buffers          # String buffers
+        }
+        
         final_result = np.mean(results) if results else 0
         
+        # Simulate final data structure creation
+        output_buffer = {
+            'summary': {
+                'total_records': len(batch_data),
+                'cache_size': len(memory_cache),
+                'intermediate_count': len(intermediate_results),
+                'buffer_count': len(data_buffers),
+                'matrix_count': len(result_matrices)
+            },
+            'result': float(final_result)
+        }
+        
+        # Brief sleep to show sustained memory usage
+        time.sleep(0.5 * intensity)
+        
+        # Calculate approximate memory usage in MB
+        memory_mb = (len(batch_data) * record_size * 8 + 
+                    len(memory_cache) * record_size * 8 + 
+                    len(data_buffers) * 5000 * intensity) / (1024 * 1024)
+        
         print(f"Batch processing completed. Final result: {final_result}")
+        print(f"Memory stats - Cache: {len(memory_cache)}, Intermediates: {len(intermediate_results)}")
+        print(f"Approximate memory consumed: {memory_mb:.2f} MB")
+        
         return {"records_processed": len(batch_data), "result": float(final_result)}
     
     finally:
+        # Clear large memory structures
+        del memory_cache
+        del intermediate_results
+        del batch_data
+        del data_buffers
+        if 'result_matrices' in locals():
+            del result_matrices
+        if 'aggregated_data' in locals():
+            del aggregated_data
         BATCH_PROCESSING.set(0)
 
 @app.get("/health")
 async def health():
     return {"ok": True}
+
+@app.get("/debug/memory")
+async def debug_memory():
+    """Debug endpoint to check memory calculation"""
+    import psutil
+    CONTAINER_MEM_LIMIT = 256 * 1024 * 1024  # 256 MB
+    
+    process = psutil.Process()
+    mem_info = process.memory_info()
+    mem_bytes = mem_info.rss
+    
+    system_percent = process.memory_percent()
+    container_percent = (mem_bytes / CONTAINER_MEM_LIMIT) * 100
+    
+    return {
+        "memory_bytes": mem_bytes,
+        "memory_mb": mem_bytes / (1024 * 1024),
+        "system_percent": system_percent,
+        "container_percent": container_percent,
+        "container_limit_mb": CONTAINER_MEM_LIMIT / (1024 * 1024)
+    }
 
 @app.get("/__status")
 async def status():
