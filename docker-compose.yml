@@ -74,6 +74,12 @@ services:
     depends_on: [c, tempo]
     ports: ["8080:8080", "8081:8081"]
     profiles: ["python"]
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+        reservations:
+          memory: 128M
 
   # Service B - Java Spring Boot (alternative implementation)  
   b-java:
